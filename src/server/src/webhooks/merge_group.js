@@ -18,7 +18,7 @@ module.exports = {
     accepts: function (req) {
         // Currently merge_group only has `checks_requested`
         // We check anyway to ensure that future adding of more types doesn't impact us
-        return ['checks_requested'].indexOf(req.args.action) > -1 && (req.args.repository && req.args.repository.private == false)
+        return ['checks_requested'].indexOf(req.args.action) > -1 && req.args.repository
     },
     handle: async function (req, res) {
         res.status(200).send('OK - Will be working on it')

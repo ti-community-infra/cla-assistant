@@ -138,7 +138,7 @@ async function handleWebHook(args, item) {
 
 module.exports = {
     accepts: function (req) {
-        return ['opened', 'reopened', 'synchronize'].indexOf(req.args.action) > -1 && (req.args.repository && req.args.repository.private == false)
+        return ['opened', 'reopened', 'synchronize'].indexOf(req.args.action) > -1 && req.args.repository
     },
     handle: async function (req, res) {
         res.status(200).send('OK - Will be working on it')
