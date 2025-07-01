@@ -559,16 +559,16 @@ describe('webhook pull request', () => {
         assert.equal(cla.check.called, false)
     })
 
-    it('should do nothing if the pull request hook comes from private repository of an org', async () => {
+    it('should action if the pull request hook comes from private repository of an org', async () => {
         test_req.args.repository.private = true
 
         pull_request(test_req, res)
         // this.timeout(100)
         await new Promise((resolve) => setTimeout(resolve, 8))
 
-        assert.equal(cla.getLinkedItem.called, false)
-        assert.equal(repoService.getPRCommitters.called, false)
-        assert.equal(cla.check.called, false)
+        assert.equal(cla.getLinkedItem.called, true)
+        assert.equal(repoService.getPRCommitters.called, true)
+        assert.equal(cla.check.called, true)
         test_req.args.repository.private = false
     })
 
