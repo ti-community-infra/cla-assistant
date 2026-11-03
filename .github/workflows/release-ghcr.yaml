@@ -34,4 +34,7 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/ti-community-infra/cla-assistant:${{ github.event.inputs.tag || github.ref_name }}
+          # A dedicated package path avoids the pre-existing
+          # ti-community-infra/cla-assistant package, whose ownership is not
+          # linked to this repository's GITHUB_TOKEN.
+          tags: ghcr.io/ti-community-infra/cla-assistant/patched:${{ github.event.inputs.tag || github.ref_name }}
