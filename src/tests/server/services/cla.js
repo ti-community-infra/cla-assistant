@@ -1798,7 +1798,23 @@ describe('cla:getLinkedItem', () => {
         assert(!repo_service.getGHRepo.called)
     })
 
-    it('should not call github if repoId and orgId provided', async () => {
+    it('should validate repoId and orgId against GitHub before using them', async () => {
+        const args = {
+            repo: 'Hello-World',
+            owner: 'login0',
+            token: 'test_token',
+            repoId: '1296269',
+            orgId: '1'
+        }
+
+        await cla.getLinkedItem(args)
+
+        assert(repo_service.get.called)
+        assert(repo_service.getGHRepo.called)
+        assert(!org_service.get.called)
+    })
+
+    it('should reject a repoId that does not match the resolved repo', async () => {
         const args = {
             repo: 'Hello-World',
             owner: 'login0',
@@ -1807,11 +1823,10 @@ describe('cla:getLinkedItem', () => {
             orgId: '1'
         }
 
-        await cla.getLinkedItem(args)
-
-        assert(repo_service.get.called)
-        assert(!repo_service.getGHRepo.called)
-        assert(!org_service.get.called)
+        await assert.rejects(
+            cla.getLinkedItem(args),
+            (err) => err.status === 400 && /repoId/.test(err.message)
+        )
     })
 })
 

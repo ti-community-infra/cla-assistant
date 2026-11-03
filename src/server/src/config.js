@@ -9,6 +9,7 @@
  * @overview Configuration Module
  */
 let path = require('path');
+const { validateSessionSecret } = require('./services/session')
 
 module.exports = {
     server: {
@@ -64,7 +65,7 @@ module.exports = {
         },
 
         security: {
-            sessionSecret: process.env.SESSION_SECRET || 'cla-assistant',
+            sessionSecret: validateSessionSecret(process.env.SESSION_SECRET, process.env.NODE_ENV),
             cookieMaxAge: 60 * 60 * 1000
         },
 

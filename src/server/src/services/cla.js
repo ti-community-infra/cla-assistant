@@ -20,6 +20,45 @@ const github = require('./github')
 const config = require('../config')
 const _ = require('lodash')
 
+function badRequest(message) {
+    const error = new Error(message)
+    error.status = 400
+    return error
+}
+
+function isScalarString(value) {
+    return typeof value === 'string' && value.trim() !== ''
+}
+
+function isScalarId(value) {
+    if (typeof value === 'number') {
+        return Number.isInteger(value) && value >= 0
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim()
+        return trimmed !== '' && /^\d+$/.test(trimmed)
+    }
+    return false
+}
+
+function validateLinkedItemArgs(owner, repo, token, repoId, orgId) {
+    if (!isScalarString(owner)) {
+        throw badRequest('owner must be a non-empty string')
+    }
+    if (repo !== undefined && repo !== null && typeof repo !== 'string') {
+        throw badRequest('repo must be a string')
+    }
+    if (token !== undefined && token !== null && typeof token !== 'string') {
+        throw badRequest('token must be a string')
+    }
+    if (repoId !== undefined && repoId !== null && !isScalarId(repoId)) {
+        throw badRequest('repoId must be a scalar identifier')
+    }
+    if (orgId !== undefined && orgId !== null && !isScalarId(orgId)) {
+        throw badRequest('orgId must be a scalar identifier')
+    }
+}
+
 class ClaService {
 
     async _getGistObject(gist_url, token, owner) {
@@ -263,31 +302,52 @@ class ClaService {
     // }
 
     async _getLinkedItem(repo, owner, token, repoId, orgId) {
+        validateLinkedItemArgs(owner, repo, token, repoId, orgId)
         token = token || config.server.github.token
 
         if (owner && !repo) {
-            return await orgService.get({
-                org: owner
-            })
+            const linkedOrg = await orgService.get({ org: owner })
+            if (linkedOrg && orgId !== undefined && orgId !== null &&
+                String(linkedOrg.orgId) !== String(orgId)) {
+                throw badRequest('orgId does not match owner')
+            }
+            return linkedOrg
         }
 
-        if (!orgId && !repoId) {
-            const ghRepo = await repoService.getGHRepo({
-                owner: owner,
-                repo: repo,
-                token: token
-            })
-            repoId = ghRepo.id
-            orgId = ghRepo.owner.id
+        const ghRepo = await repoService.getGHRepo({
+            owner: owner,
+            repo: repo,
+            token: token
+        })
+        const resolvedRepoId = ghRepo.id
+        const resolvedOrgId = ghRepo.owner && ghRepo.owner.id
+
+        if (repoId !== undefined && repoId !== null &&
+            String(repoId) !== String(resolvedRepoId)) {
+            throw badRequest('repoId does not match owner/repo')
         }
+        if (orgId !== undefined && orgId !== null &&
+            String(orgId) !== String(resolvedOrgId)) {
+            throw badRequest('orgId does not match owner/repo')
+        }
+
         try {
-            const linkedRepo = await repoService.get({ repoId: repoId })
+            const linkedRepo = await repoService.get({ repoId: resolvedRepoId })
             if (linkedRepo) {
+                if (linkedRepo.owner && linkedRepo.owner.toLowerCase() !== owner.toLowerCase()) {
+                    throw badRequest('linked repo owner does not match owner')
+                }
+                if (linkedRepo.repo && linkedRepo.repo.toLowerCase() !== repo.toLowerCase()) {
+                    throw badRequest('linked repo name does not match repo')
+                }
                 return linkedRepo
             }
             throw 'There is no linked repo'
         } catch (error) {
-            const linkedOrg = await orgService.get({ orgId: orgId })
+            if (error && error.status) {
+                throw error
+            }
+            const linkedOrg = await orgService.get({ orgId: resolvedOrgId })
             if (linkedOrg) {
                 return linkedOrg
             }
