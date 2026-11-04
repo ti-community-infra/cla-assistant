@@ -84,6 +84,32 @@ describe('cla.getLinkedItem input validation', () => {
         assert.deepEqual(getRepo.firstCall.args[0], { repoId: 41986369 })
     })
 
+    it('self-heals a linked repo that was renamed on GitHub', async () => {
+        sinon.stub(repoService, 'getGHRepo').resolves({ id: 1294565269, owner: { id: 42 } })
+        const save = sinon.stub().resolves()
+        const linkedRepo = { owner: 'tidbcloud', repo: 'tdc', repoId: 1294565269, save }
+        sinon.stub(repoService, 'get').resolves(linkedRepo)
+
+        const item = await cla.getLinkedItem({ owner: 'tidbcloud', repo: 'ti-cli' })
+
+        assert.equal(item, linkedRepo)
+        assert.equal(item.owner, 'tidbcloud')
+        assert.equal(item.repo, 'ti-cli')
+        assert.equal(save.calledOnce, true)
+    })
+
+    it('self-heals a linked repo transferred to another owner', async () => {
+        sinon.stub(repoService, 'getGHRepo').resolves({ id: 1294565269, owner: { id: 42 } })
+        const save = sinon.stub().resolves()
+        const linkedRepo = { owner: 'old-org', repo: 'ti-cli', repoId: 1294565269, save }
+        sinon.stub(repoService, 'get').resolves(linkedRepo)
+
+        await cla.getLinkedItem({ owner: 'tidbcloud', repo: 'ti-cli' })
+
+        assert.equal(linkedRepo.owner, 'tidbcloud')
+        assert.equal(save.calledOnce, true)
+    })
+
     it('resolves a repo without supplied ids', async () => {
         sinon.stub(repoService, 'getGHRepo').resolves({ id: 41986369, owner: { id: 123 } })
         sinon.stub(repoService, 'get').resolves({ owner: 'pingcap', repo: 'tidb', repoId: 41986369 })

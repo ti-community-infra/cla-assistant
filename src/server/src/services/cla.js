@@ -334,11 +334,21 @@ class ClaService {
         try {
             const linkedRepo = await repoService.get({ repoId: resolvedRepoId })
             if (linkedRepo) {
-                if (linkedRepo.owner && linkedRepo.owner.toLowerCase() !== owner.toLowerCase()) {
-                    throw badRequest('linked repo owner does not match owner')
-                }
-                if (linkedRepo.repo && linkedRepo.repo.toLowerCase() !== repo.toLowerCase()) {
-                    throw badRequest('linked repo name does not match repo')
+                // `resolvedRepoId` comes from GitHub, so a record with the same id but a
+                // different owner/name is a repo that was renamed or transferred. Keep the
+                // record in sync instead of rejecting the webhook: otherwise every rename
+                // silently stops CLA statuses until someone fixes the database by hand.
+                const ownerRenamed = linkedRepo.owner && linkedRepo.owner.toLowerCase() !== owner.toLowerCase()
+                const repoRenamed = linkedRepo.repo && linkedRepo.repo.toLowerCase() !== repo.toLowerCase()
+                if (ownerRenamed || repoRenamed) {
+                    logger.warn(`linked repo ${linkedRepo.owner}/${linkedRepo.repo} was renamed to ${owner}/${repo} (repoId ${resolvedRepoId}); updating the record`)
+                    linkedRepo.owner = owner
+                    linkedRepo.repo = repo
+                    try {
+                        await linkedRepo.save()
+                    } catch (error) {
+                        logger.warn(new Error(`could not persist the renamed repo ${owner}/${repo}: ${error}`).stack)
+                    }
                 }
                 return linkedRepo
             }
