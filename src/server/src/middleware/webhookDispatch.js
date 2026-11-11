@@ -54,7 +54,11 @@ async function dispatchWebhook(req, res, hooks, options) {
     const event = req.get('X-GitHub-Event')
     const hook = event ? hooks[event] : undefined
     if (!hook) {
-        return res.status(400).send('Unsupported event')
+        // Signature is valid, so this is a genuine GitHub delivery. Acknowledge
+        // events we do not handle (check_suite, installation, ...) with 204 so
+        // GitHub does not mark the delivery as failed and disable the webhook.
+        logger.debug({ event: event, route: req.path }, 'Ignoring unsupported GitHub event')
+        return res.status(204).send('This webhook performed no action')
     }
     if (!hook.accepts(req)) {
         return res.status(204).send('This webhook performed no action')

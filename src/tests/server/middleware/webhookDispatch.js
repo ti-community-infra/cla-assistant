@@ -112,11 +112,11 @@ describe('github webhook dispatch', function () {
         assert.deepStrictEqual(response.body, { error: 'Invalid JSON payload' })
     })
 
-    it('should return 400 for an unsupported event when the signature is valid', async function () {
+    it('should acknowledge an unsupported event with 204 when the signature is valid', async function () {
         const raw = '{"ref":"refs/heads/main"}'
         const response = await post(buildApp(hooks), '/github/webhook/tidb', 'push', raw, await signedHeaders(raw))
-        assert.strictEqual(response.status, 400)
-        assert.strictEqual(response.text, 'Unsupported event')
+        assert.strictEqual(response.status, 204)
+        assert.strictEqual(response.text, '')
     })
 
     it('should return 204 when the handler does not accept the event', async function () {
