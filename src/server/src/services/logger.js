@@ -5,6 +5,10 @@
 const bunyan = require('bunyan')
 const BunyanSlack = require('bunyan-slack')
 const rTracer = require('cls-rtracer')
+// Require the configuration directly: this module can be loaded before
+// app.js assigns global.config, and relying on that global crashed startup
+// when the webhook middleware was required from the top of app.js.
+const config = require('../config')
 
 const formatter = (record, levelName) => {
     return {
