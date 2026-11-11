@@ -10,6 +10,7 @@
  */
 let path = require('path');
 const { validateSessionSecret } = require('./services/session')
+const { validateWebhookSecret } = require('./services/webhookAuth')
 
 module.exports = {
     server: {
@@ -33,7 +34,7 @@ module.exports = {
                 appId: process.env.GITHUB_APP_ID,
                 clientId: process.env.GITHUB_APP_CLIENT,
                 clientSecret: process.env.GITHUB_APP_SECRET,
-                webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
+                webhookSecret: validateWebhookSecret(process.env.GITHUB_APP_WEBHOOK_SECRET, process.env.NODE_ENV),
             },
 
             // required

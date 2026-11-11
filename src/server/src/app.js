@@ -22,7 +22,8 @@ const mongoose = require('mongoose')
 const rTracer = require('cls-rtracer')
 const expressSession = require('express-session');
 const MongoStore = require('connect-mongo');
-const { verify: verifyWebhookSignature } = require('@octokit/webhooks-methods')
+const { rawBodySaver } = require('./services/webhookAuth')
+const { dispatchWebhook } = require('./middleware/webhookDispatch')
 
 // var sass_middleware = require('node-sass-middleware');
 
@@ -42,7 +43,6 @@ const log = require('./services/logger')
 const app = express()
 const api = {}
 const webhooks = {}
-let runningWebhooks = []
 
 // install tracing middleware
 const tracingOptions = {}
@@ -68,7 +68,8 @@ app.use((req, res, next) => {
 
 app.use(require('x-frame-options')());
 app.use(require('body-parser').json({
-    limit: '5mb'
+    limit: '5mb',
+    verify: rawBodySaver
 }));
 app.use(require('cookie-parser')());
 app.use(noSniff());
@@ -217,6 +218,10 @@ async.series([
     log.info(`✓ bootstrapped for ${app.get('env')}!!! App listening on ${config.server.http.host}:${config.server.http.port}`)
     // eslint-disable-next-line no-console
     console.log('App is initialized')
+
+    // Return JSON (never a stack trace) for malformed request bodies.
+    app.use(require('./middleware/bodyParserErrors'))
+
     let server = http.createServer(app)
     // eslint-disable-next-line no-console
     console.log('Server is created')
@@ -263,60 +268,19 @@ app.all('/api/:obj/:fun', async (req, res) => {
 // Handle webhook calls
 // ////////////////////////////////////////////////////////////////////////////////////////////////
 
-app.all('/github/webhooks', async (req, res) => {
-    const signature = req.get('X-Hub-Signature')
-    if (!(await verifyWebhookSignature(
-        config.server.github.app.webhookSecret,
-        JSON.stringify(req.body),
-        signature
-    ))) {
-        return res.status(401).send('Cannot verify webhook signature')
-    }
-    const event = req.get('X-GitHub-Event')
-    const hook = webhooks[event]
-    if (!hook) {
-        return res.status(400).send('Unsupported event')
-    }
-    if (!hook.accepts(req)) {
-        return res.status(204).send('This webhook performed no action')
-    }
-    if (isRudundantWebhook(req)) {
-        console.log(`Skip redundant webhook for the PR ${req.args.pull_request.html_url} on PR action "${req.args.action}"`)
-        return res.status(202).send('This seems to be a redundant webhook. Probably there are two webhooks registered: org- and repo-webhook')
-    }
-    return hook.handle(req, res)
-})
+app.all('/github/webhooks', handleGithubWebhook)
 
-app.all('/github/webhook/:repo', (req, res) => {
-    let event = req.headers['x-github-event']
-    try {
-        let hook = webhooks[event]
-        if (!hook) {
-            return res.status(400).send('Unsupported event')
-        }
-        if (hook.accepts(req)) {
-            if (isRudundantWebhook(req)) {
-                console.log(`Skip redundant webhook for the PR ${req.args.pull_request.html_url} on PR action "${req.args.action}"`)
-                return res.status(202).send('This seems to be a redundant webhook. Probably there are two webhooks registered: org- and repo-webhook')
-            }
-            return hook.handle(req, res)
-        }
-        return res.status(204).send('This webhook performed no action')
-    } catch (err) {
-        res.status(500).send('Internal Server Error')
-    }
-})
+app.all('/github/webhook/:repo', handleGithubWebhook)
 
-function isRudundantWebhook(req) {
-    if (req.args.pull_request && req.args.pull_request.html_url) {
-        if (runningWebhooks.indexOf(req.args.pull_request.html_url) >= 0) {
-            return true
+function handleGithubWebhook(req, res) {
+    return dispatchWebhook(req, res, webhooks, {
+        secret: config.server.github.app.webhookSecret
+    }).catch((err) => {
+        log.warn(err)
+        if (!res.headersSent) {
+            res.status(500).send('Internal Server Error')
         }
-        runningWebhooks.push(req.args.pull_request.html_url)
-        setTimeout(() => {
-            runningWebhooks = runningWebhooks.filter(e => e !== req.args.pull_request.html_url)
-        }, 2000)
-    }
+    })
 }
 
 function retryInitializeMongoose(uri, options, callback) {

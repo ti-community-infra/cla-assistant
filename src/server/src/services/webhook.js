@@ -7,6 +7,29 @@ const github = require('./github')
 const repoService = require('./repo')
 const url = require('./url')
 const logger = require('./logger')
+const config = require('../config')
+
+/**
+ * When the GitHub App credentials are configured, the app receives every
+ * pull_request / merge_group event itself. Per-repository webhooks are then
+ * redundant and must not be created or removed through the UI.
+ */
+function isAppMode(appConfig) {
+    const app = appConfig || (config.server.github && config.server.github.app) || {}
+    return !!(app.appId && app.privateKey)
+}
+
+function appModeHook() {
+    return {
+        id: null,
+        active: true,
+        type: 'App',
+        config: {
+            url: url.baseWebhook,
+            content_type: 'json'
+        }
+    }
+}
 
 class WebhookService {
     async _getHook(owner, repo, token) {
@@ -40,6 +63,9 @@ class WebhookService {
     }
 
     async getRepoHook(owner, repo, token) {
+        if (isAppMode()) {
+            return appModeHook()
+        }
         let hook = await this._getHook(owner, repo, token)
         if (!hook) {
             try {
@@ -55,6 +81,9 @@ class WebhookService {
     }
 
     getOrgHook(org, token) {
+        if (isAppMode()) {
+            return Promise.resolve(appModeHook())
+        }
         return this._getHook(org, undefined, token)
     }
 
@@ -62,12 +91,16 @@ class WebhookService {
         if (!owner || !token) {
             throw 'Owner/org and token are required.'
         }
+        const hookConfig = {
+            content_type: 'json'
+        }
+        if (config.server.github.app.webhookSecret) {
+            hookConfig.secret = config.server.github.app.webhookSecret
+        }
         let args = {
             fun: 'createWebhook',
             arg: {
-                config: {
-                    content_type: 'json'
-                },
+                config: hookConfig,
                 name: 'web',
                 events: ['pull_request', 'merge_group'],
                 active: true
@@ -102,6 +135,9 @@ class WebhookService {
     }
 
     async createOrgHook(org, token) {
+        if (isAppMode()) {
+            return appModeHook()
+        }
         let hook = await this.getOrgHook(org, token)
         if (hook) {
             throw new Error('Webhook already exist with base url ' + url.baseWebhook)
@@ -138,6 +174,9 @@ class WebhookService {
     }
 
     async removeRepoHook(owner, repo, token) {
+        if (isAppMode()) {
+            return appModeHook()
+        }
         const hook = await this.getRepoHook(owner, repo, token)
         if (!hook) {
             throw 'No webhook found with base url ' + url.baseWebhook
@@ -149,6 +188,9 @@ class WebhookService {
     }
 
     async removeOrgHook(org, token) {
+        if (isAppMode()) {
+            return appModeHook()
+        }
         const hook = await this.getOrgHook(org, token)
         if (!hook) {
             throw 'No webhook found with base url ' + url.baseWebhook
